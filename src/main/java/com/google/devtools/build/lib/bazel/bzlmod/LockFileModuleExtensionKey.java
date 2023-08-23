@@ -16,21 +16,24 @@ package com.google.devtools.build.lib.bazel.bzlmod;
 
 import com.google.auto.value.AutoValue;
 import com.google.devtools.build.lib.events.ExtendedEventHandler.Postable;
+import com.ryanharter.auto.value.gson.GenerateTypeAdapter;
 
 /**
- * After evaluating any module extension this event is sent from {@link SingleExtensionEvalFunction}
- * holding the extension id and the resolution data LockFileModuleExtension. It will be received in
- * {@link BazelLockFileModule} to be used to update the lockfile content
+ * Object represents the key of module extension in the lockfile represented by the extension ID,
+ * the OS and architecture this extension depends on.
  */
 @AutoValue
-public abstract class ModuleExtensionResolutionEvent implements Postable {
+@GenerateTypeAdapter
+public abstract class LockFileModuleExtensionKey implements Postable {
 
-  public static ModuleExtensionResolutionEvent create(
-      LockFileModuleExtensionKey extensionkey, LockFileModuleExtension lockfileModuleExtension) {
-    return new AutoValue_ModuleExtensionResolutionEvent(extensionkey, lockfileModuleExtension);
+  public abstract ModuleExtensionId getExtensionId();
+
+  public abstract String getOs();
+
+  public abstract String getArch();
+
+  public static LockFileModuleExtensionKey create(
+      ModuleExtensionId extensionId, String os, String arch) {
+    return new AutoValue_LockFileModuleExtensionKey(extensionId, os, arch);
   }
-
-  public abstract LockFileModuleExtensionKey getExtensionKey();
-
-  public abstract LockFileModuleExtension getModuleExtension();
 }

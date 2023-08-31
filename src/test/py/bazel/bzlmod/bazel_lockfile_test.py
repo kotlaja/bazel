@@ -283,8 +283,8 @@ class BazelLockfileTest(test_base.TestBase):
             '    implementation=_module_ext_impl,',
             '    tag_classes={"dep": _dep},',
             '    environ=["GREEN_TREES", "NOT_SET"],',
-            '    use_os=True,',
-            '    use_arch=True,',
+            '    os_dependent=True,',
+            '    arch_dependent=True,',
             ')',
         ],
     )
@@ -341,11 +341,11 @@ class BazelLockfileTest(test_base.TestBase):
     with open(self.Path('MODULE.bazel.lock'), 'r') as f:
       lockfile = json.loads(f.read().strip())
       self.assertIn(
-          '//:extension.bzl%lockfile_ext%<root>~lockfile_ext_1%%',
+          '//:extension.bzl%lockfile_ext%<root>~lockfile_ext_1',
           lockfile['moduleExtensions'],
       )
       self.assertIn(
-          '//:extension.bzl%lockfile_ext%%%', lockfile['moduleExtensions']
+          '//:extension.bzl%lockfile_ext', lockfile['moduleExtensions']
       )
 
     # Verify that the build succeeds using the lockfile.
@@ -388,11 +388,11 @@ class BazelLockfileTest(test_base.TestBase):
     with open(self.Path('MODULE.bazel.lock'), 'r') as f:
       lockfile = json.loads(f.read().strip())
       self.assertIn(
-          '//:extension.bzl%lockfile_ext%<root>~lockfile_ext%%',
+          '//:extension.bzl%lockfile_ext%<root>~lockfile_ext',
           lockfile['moduleExtensions'],
       )
       self.assertNotIn(
-          '//:extension.bzl%lockfile_ext%%%', lockfile['moduleExtensions']
+          '//:extension.bzl%lockfile_ext', lockfile['moduleExtensions']
       )
 
     # Verify that the build succeeds using the lockfile.
@@ -412,11 +412,11 @@ class BazelLockfileTest(test_base.TestBase):
     with open(self.Path('MODULE.bazel.lock'), 'r') as f:
       lockfile = json.loads(f.read().strip())
       self.assertNotIn(
-          '//:extension.bzl%lockfile_ext%<root>~lockfile_ext%%',
+          '//:extension.bzl%lockfile_ext%<root>~lockfile_ext',
           lockfile['moduleExtensions'],
       )
       self.assertIn(
-          '//:extension.bzl%lockfile_ext%%%', lockfile['moduleExtensions']
+          '//:extension.bzl%lockfile_ext', lockfile['moduleExtensions']
       )
 
     # Verify that the build succeeds using the lockfile.
@@ -460,7 +460,7 @@ class BazelLockfileTest(test_base.TestBase):
       self.assertGreater(len(lockfile['moduleDepGraph']), 0)
       self.assertEqual(
           list(lockfile['moduleExtensions'].keys()),
-          ['//:extension.bzl%extA%%%', '//:extension.bzl%extB%%%'],
+          ['//:extension.bzl%extA', '//:extension.bzl%extB'],
       )
 
   def testUpdateModuleExtension(self):
@@ -490,8 +490,7 @@ class BazelLockfileTest(test_base.TestBase):
     with open(self.Path('MODULE.bazel.lock'), 'r') as f:
       lockfile = json.loads(f.read().strip())
       old_impl = lockfile['moduleExtensions'][
-          '//:extension.bzl%lockfile_ext%%%'
-      ]['bzlTransitiveDigest']
+          '//:extension.bzl%lockfile_ext']['general']['bzlTransitiveDigest']
 
     # Run again to make sure the resolution value is cached. So even if module
     # resolution doesn't rerun (its event is null), the lockfile is still
@@ -518,8 +517,7 @@ class BazelLockfileTest(test_base.TestBase):
     with open(self.Path('MODULE.bazel.lock'), 'r') as f:
       lockfile = json.loads(f.read().strip())
       new_impl = lockfile['moduleExtensions'][
-          '//:extension.bzl%lockfile_ext%%%'
-      ]['bzlTransitiveDigest']
+          '//:extension.bzl%lockfile_ext']['general']['bzlTransitiveDigest']
       self.assertNotEqual(new_impl, old_impl)
 
   def testUpdateModuleExtensionErrorMode(self):
@@ -607,7 +605,7 @@ class BazelLockfileTest(test_base.TestBase):
     with open(self.Path('MODULE.bazel.lock'), 'r') as f:
       lockfile = json.loads(f.read().strip())
       self.assertEqual(
-          list(lockfile['moduleExtensions'].keys()), ['//:extension.bzl%ext%%%']
+          list(lockfile['moduleExtensions'].keys()), ['//:extension.bzl%ext']
       )
 
     self.ScratchFile('MODULE.bazel', [])
@@ -992,16 +990,19 @@ class BazelLockfileTest(test_base.TestBase):
     # build to generate lockfile with this extension
     self.RunBazel(['build', '@hello//:all'])
 
-    # replace extension key with one that includes OS
-    key = '//:extension.bzl%lockfile_ext%%%'
-    win_key = '//:extension.bzl%lockfile_ext%%WinWin%'
+    # validate an extension named 'general' is created
+    general_key = 'general'
+    ext_key = '//:extension.bzl%lockfile_ext'
     with open('MODULE.bazel.lock', 'r') as json_file:
       lockfile = json.load(json_file)
-      self.assertIn(key, lockfile['moduleExtensions'])
+      self.assertIn(ext_key, lockfile['moduleExtensions'])
+      extension_map = lockfile['moduleExtensions'][ext_key]
+      self.assertIn(general_key, extension_map)
+
+    # replace general extension with one depend on os and arch
+    win_key = 'os:WinWin,arch:arch32'
     with open('MODULE.bazel.lock', 'w') as json_file:
-      lockfile['moduleExtensions'][win_key] = lockfile['moduleExtensions'].pop(
-          key
-      )
+      extension_map[win_key] = extension_map.pop(general_key)
       json.dump(lockfile, json_file, indent=4)
 
     # update extension to depend on OS
@@ -1016,7 +1017,8 @@ class BazelLockfileTest(test_base.TestBase):
             'def _module_ext_impl(ctx):',
             '    repo_rule(name="hello")',
             'lockfile_ext = module_extension(',
-            '    implementation=_module_ext_impl, use_os=True',
+            '    implementation=_module_ext_impl, os_dependent=True, '
+            'arch_dependent=True',
             ')',
         ],
     )
@@ -1026,14 +1028,15 @@ class BazelLockfileTest(test_base.TestBase):
     # assert win_key still exists and another one was added
     with open('MODULE.bazel.lock', 'r') as json_file:
       lockfile = json.load(json_file)
-      self.assertIn(win_key, lockfile['moduleExtensions'])
-      self.assertEqual(len(lockfile['moduleExtensions']), 2)
+      extension_map = lockfile['moduleExtensions'][ext_key]
+      self.assertIn(win_key, extension_map)
+      self.assertEqual(len(extension_map), 2)
       added_key = ''
-      for key in lockfile['moduleExtensions'].keys():
+      for key in extension_map.keys():
         if key != win_key:
           added_key = key
 
-    # update extension to also depend on arch
+    # update extension to only depend on os
     self.ScratchFile(
         'extension.bzl',
         [
@@ -1045,7 +1048,7 @@ class BazelLockfileTest(test_base.TestBase):
             'def _module_ext_impl(ctx):',
             '    repo_rule(name="hello")',
             'lockfile_ext = module_extension(',
-            '    implementation=_module_ext_impl, use_os=True, use_arch=True',
+            '    implementation=_module_ext_impl, os_dependent=True',
             ')',
         ],
     )
@@ -1053,12 +1056,13 @@ class BazelLockfileTest(test_base.TestBase):
     # build again to update the file
     self.RunBazel(['build', '@hello//:all'])
     # assert both win_key and the added_key before are deleted,
-    # and a new one with arch exists
+    # and a new one without arch exists
     with open('MODULE.bazel.lock', 'r') as json_file:
       lockfile = json.load(json_file)
-      self.assertNotIn(win_key, lockfile['moduleExtensions'])
-      self.assertNotIn(added_key, lockfile['moduleExtensions'])
-      self.assertEqual(len(lockfile['moduleExtensions']), 1)
+      extensionMap = lockfile['moduleExtensions'][ext_key]
+      self.assertNotIn(win_key, extensionMap)
+      self.assertNotIn(added_key, extensionMap)
+      self.assertEqual(len(extensionMap), 1)
 
 
 if __name__ == '__main__':

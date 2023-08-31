@@ -63,7 +63,7 @@ public abstract class BazelLockFileValue implements SkyValue, Postable {
   public abstract ImmutableMap<ModuleKey, Module> getModuleDepGraph();
 
   /** Mapping the extension id to the module extension data */
-  public abstract ImmutableMap<LockFileModuleExtensionKey, LockFileModuleExtension>
+  public abstract ImmutableMap<ModuleExtensionId, ImmutableMap<LockFileModuleExtensionKey, LockFileModuleExtension>>
       getModuleExtensions();
 
   public abstract Builder toBuilder();
@@ -82,7 +82,7 @@ public abstract class BazelLockFileValue implements SkyValue, Postable {
     public abstract Builder setModuleDepGraph(ImmutableMap<ModuleKey, Module> value);
 
     public abstract Builder setModuleExtensions(
-        ImmutableMap<LockFileModuleExtensionKey, LockFileModuleExtension> value);
+        ImmutableMap<ModuleExtensionId, ImmutableMap<LockFileModuleExtensionKey, LockFileModuleExtension>> value);
 
     public abstract BazelLockFileValue build();
   }
@@ -119,14 +119,13 @@ public abstract class BazelLockFileValue implements SkyValue, Postable {
 
   /** Returns the differences between an extension and its locked data */
   public ImmutableList<String> getModuleExtensionDiff(
-      LockFileModuleExtensionKey extensionKey,
+      ModuleExtensionId extensionId,
+      LockFileModuleExtension lockedExtension,
       byte[] transitiveDigest,
       boolean filesChanged,
       ImmutableMap<String, String> envVariables,
       ImmutableMap<ModuleKey, ModuleExtensionUsage> extensionUsages,
       ImmutableMap<ModuleKey, ModuleExtensionUsage> lockedExtensionUsages) {
-    LockFileModuleExtension lockedExtension = getModuleExtensions().get(extensionKey);
-    ModuleExtensionId extensionId = extensionKey.getExtensionId();
 
     ImmutableList.Builder<String> extDiff = new ImmutableList.Builder<>();
     if (!Arrays.equals(transitiveDigest, lockedExtension.getBzlTransitiveDigest())) {

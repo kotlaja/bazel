@@ -26,9 +26,14 @@ import com.google.devtools.build.lib.events.ExtendedEventHandler.Postable;
 public abstract class ModuleExtensionResolutionEvent implements Postable {
 
   public static ModuleExtensionResolutionEvent create(
-      LockFileModuleExtensionKey extensionkey, LockFileModuleExtension lockfileModuleExtension) {
-    return new AutoValue_ModuleExtensionResolutionEvent(extensionkey, lockfileModuleExtension);
+      ModuleExtensionId extensionId,
+      LockFileModuleExtensionKey extensionkey,
+      LockFileModuleExtension lockfileModuleExtension) {
+    return new AutoValue_ModuleExtensionResolutionEvent(
+        extensionId, extensionkey, lockfileModuleExtension);
   }
+
+  public abstract ModuleExtensionId getExtensionId();
 
   public abstract LockFileModuleExtensionKey getExtensionKey();
 

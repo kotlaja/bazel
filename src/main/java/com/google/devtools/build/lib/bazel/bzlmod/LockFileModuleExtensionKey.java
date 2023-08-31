@@ -19,21 +19,18 @@ import com.google.devtools.build.lib.events.ExtendedEventHandler.Postable;
 import com.ryanharter.auto.value.gson.GenerateTypeAdapter;
 
 /**
- * Object represents the key of module extension in the lockfile represented by the extension ID,
- * the OS and architecture this extension depends on.
+ * Object represents the key of module extension in the lockfile module extensions map represented
+ * by the OS and architecture this extension depends on.
  */
 @AutoValue
 @GenerateTypeAdapter
 public abstract class LockFileModuleExtensionKey implements Postable {
 
-  public abstract ModuleExtensionId getExtensionId();
-
   public abstract String getOs();
 
   public abstract String getArch();
 
-  public static LockFileModuleExtensionKey create(
-      ModuleExtensionId extensionId, String os, String arch) {
-    return new AutoValue_LockFileModuleExtensionKey(extensionId, os, arch);
+  public static LockFileModuleExtensionKey create(String os, String arch) {
+    return new AutoValue_LockFileModuleExtensionKey(os, arch);
   }
 }

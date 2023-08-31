@@ -23,7 +23,6 @@ import static com.google.devtools.build.lib.bazel.bzlmod.DelegateTypeAdapterFact
 import com.google.auto.value.AutoValue;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
-import com.google.devtools.build.lib.bazel.bzlmod.ModuleExtensionId.IsolationKey;
 import com.google.devtools.build.lib.bazel.bzlmod.Version.ParseException;
 import com.google.devtools.build.lib.cmdline.Label;
 import com.google.devtools.build.lib.cmdline.LabelSyntaxException;
@@ -105,63 +104,77 @@ public final class GsonTypeAdapterUtil {
         }
       };
 
-  public static final TypeAdapter<LockFileModuleExtensionKey> MODULE_EXTENSION_KEY_TYPE_ADAPTER =
+  public static final TypeAdapter<ModuleExtensionId> MODULE_EXTENSION_ID_TYPE_ADAPTER =
       new TypeAdapter<>() {
         @Override
-        public void write(JsonWriter jsonWriter, LockFileModuleExtensionKey moduleExtKey)
-            throws IOException {
-          ModuleExtensionId moduleExtId = moduleExtKey.getExtensionId();
-          // String isolationKeyPart = moduleExtId.getIsolationKey().map(key -> "%" +
-          // key).orElse("");
+        public void write(JsonWriter jsonWriter, ModuleExtensionId moduleExtId) throws IOException {
+          String isolationKeyPart = moduleExtId.getIsolationKey().map(key -> "%" + key).orElse("");
           jsonWriter.value(
               moduleExtId.getBzlFileLabel()
                   + "%"
                   + moduleExtId.getExtensionName()
-                  + "%"
-                  + moduleExtId.getIsolationKey().map(key -> "" + key).orElse("")
-                  + "%"
-                  + moduleExtKey.getOs()
-                  + "%"
-                  + moduleExtKey.getArch());
+                  + isolationKeyPart);
+        }
+
+        @Override
+        public ModuleExtensionId read(JsonReader jsonReader) throws IOException {
+          String jsonString = jsonReader.nextString();
+          var extIdParts = Splitter.on('%').splitToList(jsonString);
+          Optional<ModuleExtensionId.IsolationKey> isolationKey;
+          if (extIdParts.size() > 2) {
+            try {
+              isolationKey =
+                  Optional.of(ModuleExtensionId.IsolationKey.fromString(extIdParts.get(2)));
+            } catch (ParseException e) {
+              throw new JsonParseException(
+                  String.format(
+                      "Unable to parse ModuleExtensionID isolation key: '%s' from the lockfile",
+                      extIdParts.get(2)),
+                  e);
+            }
+          } else {
+            isolationKey = Optional.empty();
+          }
+          try {
+            return ModuleExtensionId.create(
+                Label.parseCanonical(extIdParts.get(0)), extIdParts.get(1), isolationKey);
+          } catch (LabelSyntaxException e) {
+            throw new JsonParseException(
+                String.format(
+                    "Unable to parse ModuleExtensionID bzl file label: '%s' from the lockfile",
+                    extIdParts.get(0)),
+                e);
+          }
+        }
+      };
+
+  public static final TypeAdapter<LockFileModuleExtensionKey> MODULE_EXTENSION_KEY_TYPE_ADAPTER =
+      new TypeAdapter<>() {
+
+        private final String OS_KEY = "os:";
+        private final String ARCH_KEY = "arch:";
+        private final String GENERAL_EXTENSION = "general"; //TODO(salmasamy) decide the name
+
+        @Override
+        public void write(JsonWriter jsonWriter, LockFileModuleExtensionKey extKey)
+            throws IOException {
+          if (extKey.getOs().isEmpty() && extKey.getArch().isEmpty()) {
+            jsonWriter.value(GENERAL_EXTENSION);
+          } else {
+            jsonWriter.value(OS_KEY + extKey.getOs() + "," + ARCH_KEY + extKey.getArch());
+          }
         }
 
         @Override
         public LockFileModuleExtensionKey read(JsonReader jsonReader) throws IOException {
           String jsonString = jsonReader.nextString();
-          var extIdParts = Splitter.on('%').splitToList(jsonString);
-          Optional<ModuleExtensionId.IsolationKey> isolationKey =
-              parseIsolationKey(extIdParts.get(2));
-          ModuleExtensionId moduleExtId =
-              parseExtensionId(extIdParts.get(0), extIdParts.get(1), isolationKey);
-          return LockFileModuleExtensionKey.create(
-              moduleExtId, extIdParts.get(3), extIdParts.get(4));
-        }
-
-        private ModuleExtensionId parseExtensionId(
-            String label, String name, Optional<ModuleExtensionId.IsolationKey> isolationKey) {
-          try {
-            return ModuleExtensionId.create(Label.parseCanonical(label), name, isolationKey);
-          } catch (LabelSyntaxException e) {
-            throw new JsonParseException(
-                String.format(
-                    "Unable to parse ModuleExtensionID bzl file label: '%s' from the lockfile",
-                    label),
-                e);
+          if(jsonString.equals(GENERAL_EXTENSION)) {
+            return LockFileModuleExtensionKey.create("", "");
           }
-        }
-
-        private Optional<IsolationKey> parseIsolationKey(String s) {
-          if (s.isEmpty()) {
-            return Optional.empty();
-          }
-          try {
-            return Optional.of(ModuleExtensionId.IsolationKey.fromString(s));
-          } catch (ParseException e) {
-            throw new JsonParseException(
-                String.format(
-                    "Unable to parse ModuleExtensionID isolation key: '%s' from the lockfile", s),
-                e);
-          }
+          var extParts = Splitter.on(',').splitToList(jsonString);
+          String os = extParts.get(0).substring(OS_KEY.length());
+          String arch = extParts.get(1).substring(ARCH_KEY.length());
+          return LockFileModuleExtensionKey.create(os, arch);
         }
       };
 
@@ -341,6 +354,7 @@ public final class GsonTypeAdapterUtil {
         .registerTypeAdapter(Label.class, LABEL_TYPE_ADAPTER)
         .registerTypeAdapter(Version.class, VERSION_TYPE_ADAPTER)
         .registerTypeAdapter(ModuleKey.class, MODULE_KEY_TYPE_ADAPTER)
+        .registerTypeAdapter(ModuleExtensionId.class, MODULE_EXTENSION_ID_TYPE_ADAPTER)
         .registerTypeAdapter(LockFileModuleExtensionKey.class, MODULE_EXTENSION_KEY_TYPE_ADAPTER)
         .registerTypeAdapter(ModuleExtensionId.IsolationKey.class, ISOLATION_KEY_TYPE_ADAPTER)
         .registerTypeAdapter(AttributeValues.class, new AttributeValuesAdapter())

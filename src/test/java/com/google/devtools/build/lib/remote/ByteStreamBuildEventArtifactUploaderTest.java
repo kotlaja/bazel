@@ -64,6 +64,7 @@ import com.google.devtools.build.lib.vfs.DigestHashFunction;
 import com.google.devtools.build.lib.vfs.FileSystem;
 import com.google.devtools.build.lib.vfs.FileSystemUtils;
 import com.google.devtools.build.lib.vfs.Path;
+import com.google.devtools.build.lib.vfs.PathFragment;
 import com.google.devtools.build.lib.vfs.SyscallCache;
 import com.google.devtools.build.lib.vfs.inmemoryfs.InMemoryFileSystem;
 import com.google.devtools.common.options.Options;
@@ -355,29 +356,35 @@ public class ByteStreamBuildEventArtifactUploaderTest {
     RemoteActionInputFetcher actionInputFetcher = mock(RemoteActionInputFetcher.class);
     ByteStreamBuildEventArtifactUploader artifactUploader = newArtifactUploader(remoteCache);
 
-    ActionInputMap outputs = new ActionInputMap(2);
-    Artifact artifact = createRemoteArtifact("file1.txt", "foo", outputs);
+    ActionInputMap inputs = new ActionInputMap(2);
+    Artifact artifact = createRemoteArtifact("file1.txt", "foo", inputs);
 
     RemoteActionFileSystem remoteFs =
         new RemoteActionFileSystem(
             fs,
             execRoot.asFragment(),
             outputRoot.getRoot().asPath().relativeTo(execRoot).getPathString(),
-            outputs,
-            ImmutableList.of(artifact),
+            inputs,
+            ImmutableList.of(),
             actionInputFetcher);
+    Path link = outputRoot.getRoot().asPath().getRelative("inputLink");
+    remoteFs.createDirectoryAndParents(link.getParentDirectory().asFragment());
+    remoteFs.createSymbolicLink(link.asFragment(), artifact.getPath().asFragment());
     Path remotePath = remoteFs.getPath(artifact.getPath().getPathString());
     assertThat(remotePath.getFileSystem()).isEqualTo(remoteFs);
+    link = remoteFs.getPath(link.getPathString());
+    assertThat(remoteFs.getRemoteMetadata(link.asFragment())).isNotNull();
     LocalFile file =
         new LocalFile(
             remotePath, LocalFileType.OUTPUT, /*artifact=*/ null, /*artifactMetadata=*/ null);
 
     // act
 
-    PathConverter pathConverter = artifactUploader.upload(ImmutableMap.of(remotePath, file)).get();
+    PathConverter pathConverter = artifactUploader.upload(ImmutableMap.of(remotePath, file, link, file)).get();
 
-    FileArtifactValue metadata = outputs.getMetadata(artifact);
+    FileArtifactValue metadata = inputs.getMetadata(artifact);
     Digest digest = DigestUtil.buildDigest(metadata.getDigest(), metadata.getSize());
+    assertThat(eventHandler.getEvents()).isEmpty();
 
     // assert
 

@@ -24,7 +24,7 @@ import com.google.devtools.build.lib.vfs.PathFragment;
  */
 @ThreadSafe
 @Immutable
-final class InMemoryLinkInfo extends InMemoryContentInfo {
+public final class InMemoryLinkInfo extends InMemoryContentInfo {
 
   private final PathFragment linkContent;
   private final PathFragment normalizedLinkContent;
@@ -71,7 +71,7 @@ final class InMemoryLinkInfo extends InMemoryContentInfo {
    * Returns the content of the symbolic link, with ".." and "." removed
    * (except for the possibility of necessary ".." segments at the beginning).
    */
-  PathFragment getNormalizedLinkContent() {
+  public PathFragment getNormalizedLinkContent() {
     return normalizedLinkContent;
   }
 

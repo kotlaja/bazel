@@ -46,6 +46,7 @@ import com.google.devtools.build.lib.vfs.Symlinks;
 import com.google.devtools.build.lib.vfs.inmemoryfs.FileInfo;
 import com.google.devtools.build.lib.vfs.inmemoryfs.InMemoryContentInfo;
 import com.google.devtools.build.lib.vfs.inmemoryfs.InMemoryFileSystem;
+import com.google.devtools.build.lib.vfs.inmemoryfs.InMemoryLinkInfo;
 import com.google.errorprone.annotations.CanIgnoreReturnValue;
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -557,6 +558,11 @@ public class RemoteActionFileSystem extends DelegateFileSystem {
       return createRemoteMetadata(remoteFile);
     }
 
+    PathFragment targetPath = remoteOutputTree.getSymbolicLinkContent(path);
+    if (targetPath != null) {
+      return getRemoteMetadata(targetPath);
+    }
+
     return null;
   }
 
@@ -763,6 +769,15 @@ public class RemoteActionFileSystem extends DelegateFileSystem {
         return null;
       }
       return (RemoteFileInfo) node;
+    }
+
+    @Nullable
+    PathFragment getSymbolicLinkContent(PathFragment path) {
+      InMemoryContentInfo node = inodeStatErrno(path, /* followSymlinks=*/ false).inode();
+      if (!node.isSymbolicLink()) {
+        return null;
+      }
+      return ((InMemoryLinkInfo) node).getNormalizedLinkContent();
     }
   }
 
